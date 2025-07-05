@@ -1,0 +1,125 @@
+/* App.css - Old school DOS style message board */
+
+/* Reset defaults and apply monospace terminal look */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #000;
+  color: #0f0;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+/* Main app container */
+.App {
+  padding: 1rem;
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+/* Connect / login buttons area */
+.connect-buttons,
+.login-header {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  align-items: center;
+}
+
+.connect-buttons button,
+.login-header button {
+  background-color: #000;
+  color: #0f0;
+  border: 1px solid #0f0;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.connect-buttons button:hover,
+.login-header button:hover {
+  background-color: #0f0;
+  color: #000;
+}
+
+/* Message board container */
+.message-board {
+  background-color: #000;
+  border: 2px solid #0f0;
+  padding: 1rem;
+  height: 400px;
+  overflow-y: auto;
+}
+
+.message-board h2 {
+  margin: 0 0 0.5rem;
+  color: #0f0;
+  font-size: 1.2rem;
+}
+
+.message-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.message-list li {
+  padding: 0.2rem 0;
+  border-top: 1px dotted #0f0;
+  display: flex;
+  align-items: baseline;
+}
+
+.message-list li:first-child {
+  border-top: none;
+}
+
+.username {
+  color: #0f0;
+  margin-right: 0.5rem;
+}
+
+.timestamp {
+  color: #090;
+  margin-left: auto;
+  font-size: 0.8rem;
+}
+
+/* Post form styled as command prompt */
+.post-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.post-form input[type="text"] {
+  flex: 1;
+  background-color: #000;
+  color: #0f0;
+  border: 1px solid #0f0;
+  padding: 0.3rem;
+  font-family: inherit;
+}
+
+.post-form input[type="text"]:disabled {
+  color: #050;
+  border-color: #050;
+}
+
+.post-form button {
+  background-color: #000;
+  color: #0f0;
+  border: 1px solid #0f0;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.post-form button:disabled {
+  color: #050;
+  border-color: #050;
+  cursor: not-allowed;
+}
+
+.post-form button:hover:enabled {
+  background-color: #0f0;
+  color: #000;
+}
