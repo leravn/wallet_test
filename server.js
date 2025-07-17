@@ -1,44 +1,68 @@
+// server.js
 const express = require('express');
+const cors = require('cors');             // ← import cors
 const fs = require('fs');
 const path = require('path');
-const bodyParser = require('body-parser');
-const { nanoid } = require('nanoid');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
-const PORT = 4000;
-const DATA_DIR = path.join(__dirname, 'messages');
+const PORT = process.env.PORT || 4000;
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+// ── Add CORS before any routes ──
+app.use(cors({
+  origin: 'http://localhost:3000',        // allow only your React app
+  methods: ['GET','POST'],                // allowed HTTP methods
+  allowedHeaders: ['Content-Type'],       // allowed headers
+}));
 
-app.use(bodyParser.json());
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  next();
-});
+app.use(express.json());
 
-app.get('/messages', (req, res) => {
-  const files = fs.readdirSync(DATA_DIR);
-  const msgs = files
-    .map(name => JSON.parse(fs.readFileSync(path.join(DATA_DIR, name), 'utf8')))
-    .sort((a, b) => a.timestamp - b.timestamp);
-  res.json(msgs);
-});
+const messagesDir = path.join(__dirname, 'messages');
+if (!fs.existsSync(messagesDir)) fs.mkdirSync(messagesDir);
 
-app.post('/messages', (req, res) => {
-  const { username, text, address } = req.body;
-  if (!username || !text || !address) {
-    return res.status(400).json({ error: 'username, text, and address required' });
-  }
-  const timestamp = Date.now();
-  const id = nanoid();
-  const msg = { id, username, text, address, timestamp };
-  fs.writeFileSync(
-    path.join(DATA_DIR, `${timestamp}-${id}.json`),
-    JSON.stringify(msg, null, 2)
+// GET all messages
+app.get('/messages', async (req, res) => {
+  const files = await fs.promises.readdir(messagesDir);
+  const msgs = await Promise.all(
+    files.map(f => fs.promises.readFile(path.join(messagesDir, f), 'utf8'))
   );
-  res.status(201).json(msg);
+  const parsed = msgs.map(JSON.parse);
+  parsed.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  res.json(parsed);
 });
 
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+// POST a new message, with slow-mode: max 6 per minute per address
+app.post('/messages', async (req, res) => {
+  const { username, text, address } = req.body;
+  if (!address || !text) return res.status(400).json({ error: 'Bad request' });
+
+  const now = Date.now();
+  const files = await fs.promises.readdir(messagesDir);
+  let recentCount = 0;
+  for (const file of files) {
+    const data = await fs.promises.readFile(path.join(messagesDir, file), 'utf8');
+    const msg = JSON.parse(data);
+    if (msg.address === address && now - new Date(msg.timestamp).getTime() < 60_000) {
+      recentCount++;
+      if (recentCount >= 6) break;
+    }
+  }
+
+  if (recentCount >= 6) {
+    return res
+      .status(429)
+      .json({ error: 'Slow mode: you can only post 6 messages per minute.' });
+  }
+
+  const id = uuidv4();
+  const message = { id, username, text, address, timestamp: new Date().toISOString() };
+  await fs.promises.writeFile(
+    path.join(messagesDir, `${id}.json`),
+    JSON.stringify(message, null, 2)
+  );
+  res.json(message);
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

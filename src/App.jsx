@@ -9,9 +9,9 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // Initialize ECC for Taproot/P2TR support
 initEccLib(ecc);
 
-const API_URL = 'http://localhost:4000';
+const API_URL     = 'http://localhost:4000';
 const ORDINALS_API = 'https://api.hiro.so/ordinals/v1/inscriptions';
-const UTXOS_API = addr => `https://blockstream.info/api/address/${addr}/utxo`;
+const UTXOS_API    = addr => `https://blockstream.info/api/address/${addr}/utxo`;
 
 function renderMetadata(obj, parentKey = '') {
   return Object.entries(obj).map(([key, val]) => {
@@ -36,31 +36,55 @@ function renderMetadata(obj, parentKey = '') {
 
 function MessageBoard({ address }) {
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const listRef = useRef(null);
+  const [input, setInput]       = useState('');
+  const listRef                 = useRef(null);
 
   useEffect(() => {
     (async () => {
-      const res = await fetch(`${API_URL}/messages`);
-      setMessages(await res.json());
+      try {
+        const res = await fetch(`${API_URL}/messages`);
+        setMessages(await res.json());
+      } catch (e) {
+        console.error('Failed to load messages:', e);
+      }
     })();
   }, []);
 
   useEffect(() => {
-    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+    if (listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
   }, [messages]);
 
   const handlePost = async () => {
     if (!address || !input.trim()) return;
     const username = address.slice(-4);
-    const res = await fetch(`${API_URL}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, text: input.trim(), address }),
-    });
-    const msg = await res.json();
-    setMessages(prev => [...prev, msg]);
-    setInput('');
+
+    try {
+      const res = await fetch(`${API_URL}/messages`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ username, text: input.trim(), address }),
+      });
+
+      if (res.status === 429) {
+        const { error } = await res.json();
+        alert(error);
+        return;
+      }
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({}));
+        alert(error || 'Failed to post message');
+        return;
+      }
+
+      const msg = await res.json();
+      setMessages(prev => [...prev, msg]);
+      setInput('');
+    } catch (e) {
+      console.error('Network error posting message:', e);
+      alert('Network error: could not connect to server.');
+    }
   };
 
   return (
@@ -96,17 +120,17 @@ function MessageBoard({ address }) {
 
 function InscriptionsViewer({ address }) {
   const [inscriptions, setInscriptions] = useState([]);
-  const [selected, setSelected] = useState([]);
-  const [filterId, setFilterId] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [selected, setSelected]         = useState([]);
+  const [filterId, setFilterId]         = useState('');
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState('');
 
   const loadInscriptions = async () => {
     if (!address) return;
     setLoading(true);
     setError('');
     try {
-      // 1) Fetch all inscriptions for this address
+      // 1) Fetch inscriptions
       let all = [], limit = 60, offset = 0, total = 0;
       do {
         const res = await fetch(
@@ -119,40 +143,33 @@ function InscriptionsViewer({ address }) {
         offset += limit;
       } while (offset < total);
 
-      // 2) Parse outpoint (txid & vout) from `location: "txid:vout:offset"` :contentReference[oaicite:0]{index=0}
+      // 2) Parse outpoint from location
       const withOutpoints = all.map(insc => {
         const [txid, voutStr] = insc.location.split(':');
-        return {
-          ...insc,
-          txid,
-          vout: parseInt(voutStr, 10),
-        };
+        return { ...insc, txid, vout: parseInt(voutStr, 10) };
       });
 
-      // 3) Fetch all UTXOs for this address
+      // 3) Fetch UTXOs
       const utxoRes = await fetch(UTXOS_API(address));
       if (!utxoRes.ok) throw new Error(`UTXO fetch failed (${utxoRes.status})`);
       const utxos = await utxoRes.json();
 
-      // 4) For each inscription, find its UTXO & fetch real scriptPubKey
+      // 4) Merge real UTXO value + scriptPubKey
       const merged = await Promise.all(
         withOutpoints.map(async insc => {
           const u = utxos.find(u => u.txid === insc.txid && u.vout === insc.vout);
-          if (!u) {
-            return { ...insc, value: null, scriptHex: null };
-          }
+          if (!u) return { ...insc, value: null, scriptHex: null };
           const txRes = await fetch(`https://blockstream.info/api/tx/${insc.txid}`);
           if (!txRes.ok) throw new Error(`Tx fetch failed (${txRes.status})`);
           const txJson = await txRes.json();
           const v = txJson.vout[insc.vout];
           return {
             ...insc,
-            value: v.value,            // sats from Blockstream
-            scriptHex: v.scriptpubkey, // real scriptPubKey hex
+            value: v.value,
+            scriptHex: v.scriptpubkey,
           };
         })
       );
-
       setInscriptions(merged);
     } catch (e) {
       console.error(e);
@@ -224,7 +241,10 @@ function InscriptionsViewer({ address }) {
       </div>
 
       <div className="select-section">
-        <button onClick={() => setSelected(visible.map(i => i.id))} disabled={!visible.length}>
+        <button
+          onClick={() => setSelected(visible.map(i => i.id))}
+          disabled={!visible.length}
+        >
           Select All
         </button>
         {selected.length > 0 && (
