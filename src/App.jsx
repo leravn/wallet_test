@@ -263,9 +263,9 @@ function InscriptionsViewer({ address }) {
       )}
 
       <div className="inscriptions-grid">
-        {visible.map(insc => (
+        {visible.map((insc, idx) => (
           <div
-            key={insc.id}
+            key={`${insc.id}-${idx}`}
             className={`inscription-item ${selected.includes(insc.id) ? 'selected' : ''}`}
             onClick={() => toggleSelect(insc.id)}
           >
